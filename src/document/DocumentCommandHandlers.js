@@ -745,7 +745,6 @@ define(function (require, exports, module) {
             filePath = file._path,
             docTextToStore = docToSave._masterEditor._codeMirror.getValue(),
             fileTimestamp  = new Date();
-        
         function handleError(error) {
             _showSaveFileError(error, file.fullPath)
                 .done(function () {
@@ -833,7 +832,6 @@ define(function (require, exports, module) {
                     );
                 });
             }
-
             if (docToSave.keepChangesTime) {
                 // The user has decided to keep conflicting changes in the editor. Check to make sure
                 // the file hasn't changed since they last decided to do that.
@@ -900,6 +898,7 @@ define(function (require, exports, module) {
         exports.trigger(exports.APP_QUIT_CANCELLED);
     }
 
+    
     /**
      * Opens the native OS save as dialog and saves document.
      * The original document is reverted in case it was dirty.
@@ -1041,7 +1040,7 @@ define(function (require, exports, module) {
             origPath = doc.file.fullPath;
             // If the document is an untitled document, we should default to project root.
             if (doc.isUntitled()) {
-                // (Issue #4489) iff we're saving an untitled document, go ahead and switch to this document
+                // (Issue #4489) if we're saving an untitled document, go ahead and switch to this document
                 //   in the editor, so that if we're, for example, saving several files (ie. Save All),
                 //   then the user can visually tell which document we're currently prompting them to save.
                 var info = MainViewManager.findInAllWorkingSets(origPath).shift();
@@ -1066,11 +1065,7 @@ define(function (require, exports, module) {
                     }
                 }
             }
-            FileSystem.showSaveDialog(
-                Strings.SAVE_FILE_AS,
-                saveAsDefaultPath, 
-                defaultName, 
-                function (err, selectedPath) {
+            FileSystem.showSaveDialog(Strings.SAVE_FILE_AS, saveAsDefaultPath, defaultName, function (err, selectedPath) {
                 if (!err) {
                     if (selectedPath) {
                         _doSaveAfterSaveDialog(selectedPath);
@@ -1717,7 +1712,6 @@ define(function (require, exports, module) {
 
         return result.promise();
     }
-    
     /**
     * Does a full reload of the browser window
     * @param {string} href The url to reload into the window
@@ -1774,7 +1768,6 @@ define(function (require, exports, module) {
             }, delay || 500);
         };
     };
-
     /**
      * Restarts brackets Handler
      * @param {boolean=} loadWithoutExtensions - true to restart without extensions,
@@ -1808,7 +1801,6 @@ define(function (require, exports, module) {
         // Give Mac native menus extra time to update shortcut highlighting.
         // Prevents the menu highlighting from getting messed up after reload.
         var debouncedBrowserReload = debounce(browserReload, null, href);
-
         debouncedBrowserReload();
     }
 

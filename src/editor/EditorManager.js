@@ -84,12 +84,12 @@ define(function (require, exports, module) {
      * @private
      */
     var _lastFocusedEditor = null;
-    
+
     /**
      * Registered inline-editor widget providers sorted descending by priority.
      * @see {@link #registerInlineEditProvider}.
      * @type {Array.<{priority:number, provider:function(...)}>}
-     * @private 
+     * @private
      */
     var _inlineEditProviders = [];
 
@@ -108,7 +108,8 @@ define(function (require, exports, module) {
      * @type {Array.<function(...)>}
      */
     var _jumpToDefProviders = [];
-
+    
+    
     /**
      * DOM element to house any hidden editors created soley for inline widgets
      * @private
@@ -116,6 +117,7 @@ define(function (require, exports, module) {
      */
     var _$hiddenEditorsContainer;
 
+    
     /**
      * Retrieves the visible full-size Editor for the currently opened file in the ACTIVE_PANE
      * @return {?Editor} editor of the current view or null
@@ -125,6 +127,8 @@ define(function (require, exports, module) {
             doc = currentPath && DocumentManager.getOpenDocumentForPath(currentPath);
         return doc && doc._masterEditor;
     }
+    
+    
 
     /**
      * Updates _viewStateCache from the given editor's actual current state
@@ -148,6 +152,7 @@ define(function (require, exports, module) {
         }
     }
 
+    
 	/**
      * Editor focus handler to change the currently active editor
      * @private
@@ -1001,6 +1006,7 @@ define(function (require, exports, module) {
         }
     }
 
+    
     // Set up event dispatching
     EventDispatcher.makeEventDispatcher(exports);
 
@@ -1019,7 +1025,6 @@ define(function (require, exports, module) {
         return _toggleInlineWidget(_inlineDocsProviders, Strings.ERROR_QUICK_DOCS_PROVIDER_NOT_FOUND);
     });
     CommandManager.register(Strings.CMD_JUMPTO_DEFINITION, Commands.NAVIGATE_JUMPTO_DEFINITION, _doJumpToDef);
-    
     if (localHistory) {
         CommandManager.register(Strings.CMD_TOGGLE_LOCAL_HISTORY, Commands.TOGGLE_LOCAL_HISTORY, _toggleLocalHistory);
     }
@@ -1053,6 +1058,7 @@ define(function (require, exports, module) {
     exports.getCurrentFullEditor          = getCurrentFullEditor;
     exports.getFocusedEditor              = getFocusedEditor;
 
+    
     exports.registerInlineEditProvider    = registerInlineEditProvider;
     exports.registerInlineDocsProvider    = registerInlineDocsProvider;
     exports.registerJumpToDefProvider     = registerJumpToDefProvider;
