@@ -21,8 +21,8 @@
  *
  */
 
-/*jslint regexp: true */
-/*global unescape */
+/* jslint regexp: true */
+/* global unescape */
 
 /**
  * Set of utilities for working with files and text content.
@@ -58,11 +58,6 @@ define(function (require, exports, module) {
      *   have a load order dependency on preferences manager
      */
     var MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
-
-    /**
-     * @const {List} list of File Extensions which will be opened in external Application
-     */
-    var extListToBeOpenedInExtApp = [];
 
 
     /**
@@ -217,6 +212,43 @@ define(function (require, exports, module) {
         DeprecationWarning.deprecationWarning("FileUtils.showFileOpenError() has been deprecated. " +
                                               "Please use DocumentCommandHandlers.showFileOpenError() instead.");
         return DocumentCommandHandlers.showFileOpenError(name, path);
+    }
+    
+    /*
+    Modal (div.modal-wrapper)
+    window.context.all[2206].children["0"].childNodes["0"].childNodes[5]
+    window.context.all.HTMLAllCollection[2206].children["0"].childNodes["0"].childNodes[5]
+    window.context.body.children[9]
+    BUTTON: (button.dialog-button.btn.primary)
+    window.context.body.children[9].children["0"].children["0"].children[2].children[2]
+    */
+    
+    /**
+     * Creates an HTML string from a list of files to be used in the selection of a Local 
+     * History file; allowing for version control.
+     * @param {Array.<string>} Array of filenames with paths to display.
+     */
+    function makeDialogClickableFileList(fileList) {
+        // fileList = [[docText, timestamp, filePath], [docText, timestamp, filePath], ...]    
+        
+        // Ensure results display in descending order because adding
+        // 'ORDER BY str__Timestamp DESC' to WebSQL query doesn't work
+        fileList = fileList.sort(function(a, b) {
+            return new Date(a[1]).getTime() < new Date(b[1]).getTime();
+        });
+        
+        var result = "<div class='localHistoryContainer'>";
+	    result    += "<ul class='clickable-dialog-list'>";
+        fileList.forEach(function (file) {
+            result += "<li class='LHListItem' onclick='window.LocalHistory.whenClickListItem(this)' timestamp='" + file[1] + "'>";
+            result += "<span style='padding-right:3px;'>&bull;</span> " + file[1];
+            result += "<a href='#' onclick='event.stopPropagation(); event.preventDefault(); window.LocalHistory.handleItemClose(this);' class='LHListItemXClose' title='Delete'>&times;</a>";
+            result += "</li>";
+        });
+        result += "</ul>";
+        result += "</div>";
+
+        return result;
     }
 
     /**
@@ -531,28 +563,6 @@ define(function (require, exports, module) {
         return pathArray.join("/");
     }
 
-    /**
-     * @param {string} ext extension string a file
-     * @return {string} returns true If file to be opened in External Application.
-     *
-     */
-    function shouldOpenInExternalApplication(ext) {
-        return extListToBeOpenedInExtApp.includes(ext);
-    }
-
-    /**
-     * @param {string} ext File Extensions to be added in External App List
-     *
-     */
-    function addExtensionToExternalAppList(ext) {
-
-        if(Array.isArray(ext)) {
-            extListToBeOpenedInExtApp = ext;
-        } else if (typeof ext === 'string'){
-            extListToBeOpenedInExtApp.push(ext);
-        }
-    }
-
     // Asynchronously load DocumentCommandHandlers
     // This avoids a temporary circular dependency created
     // by relocating showFileOpenError() until deprecation is over
@@ -578,6 +588,7 @@ define(function (require, exports, module) {
     exports.makeDialogFileList             = makeDialogFileList;
     exports.readAsText                     = readAsText;
     exports.writeText                      = writeText;
+    exports.makeDialogClickableFileList    = makeDialogClickableFileList;
     exports.convertToNativePath            = convertToNativePath;
     exports.convertWindowsPathToUnixPath   = convertWindowsPathToUnixPath;
     exports.getNativeBracketsDirectoryPath = getNativeBracketsDirectoryPath;
@@ -595,6 +606,4 @@ define(function (require, exports, module) {
     exports.comparePaths                   = comparePaths;
     exports.MAX_FILE_SIZE                  = MAX_FILE_SIZE;
     exports.encodeFilePath                 = encodeFilePath;
-    exports.shouldOpenInExternalApplication = shouldOpenInExternalApplication;
-    exports.addExtensionToExternalAppList = addExtensionToExternalAppList;
 });

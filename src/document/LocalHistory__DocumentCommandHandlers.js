@@ -135,10 +135,6 @@ define(function (require, exports, module) {
 
     /** Unique token used to indicate user-driven cancellation of Save As (as opposed to file IO error) */
     var USER_CANCELED = { userCanceled: true };
-
-    PreferencesManager.definePreference("defaultExtension", "string", "", {
-        excludeFromHints: true
-    });
     
     var LOCAL_HISTORY = "localHistory",
         localHistory  = PreferencesManager.get(LOCAL_HISTORY);
@@ -739,7 +735,7 @@ define(function (require, exports, module) {
      * @return {$.Promise} a promise that is resolved with the File of docToSave (to mirror
      *   the API of _doSaveAs()). Rejected in case of IO error (after error dialog dismissed).
      */
-    function doSave(docToSave, force) {
+    function doSave(docToSave, force, savedDocText) {
         var result = new $.Deferred(),
             file = docToSave.file,
             filePath = file._path,
@@ -752,7 +748,57 @@ define(function (require, exports, module) {
                     result.reject(error);
                 });
         }
+    
+        function handleSaveChanges() {
+            Dialogs.showModalDialog(
+                DefaultDialogs.DIALOG_ID_SAVE_CLOSE,
+                Strings.SAVE_CLOSE_TITLE,
+                Strings.LOCAL_HISTORY_SAVE_MESSAGE,
+                [
+                    {
+                        className : Dialogs.DIALOG_BTN_CLASS_LEFT,
+                        id        : Dialogs.DIALOG_BTN_DONTSAVE,
+                        text      : Strings.OVERWRITE
+                    },
+                    {
+                        className : Dialogs.DIALOG_BTN_CLASS_NORMAL,
+                        id        : Dialogs.DIALOG_BTN_CANCEL,
+                        text      : Strings.CANCEL
+                    },
+                    {
+                        className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                        id        : Dialogs.DIALOG_BTN_OK,
+                        text      : Strings.SAVE_AND_OVERWRITE
+                    }
+                ]
+            )
+                .done(function (id) {
+                    if (id === Dialogs.DIALOG_BTN_CANCEL) {
+                        dispatchAppQuitCancelledEvent();
+                        result.resolve();
+                    } else if (id === Dialogs.DIALOG_BTN_OK) {
+                        // "Overwrite and Save" case:
+                        LocalHistoryTrySave(savedDocText, fileTimestamp);
+                        result.resolve();
+                    } else {
+                        // "Overwrite" case:
+                        // Reset document text in active editor
+                        docToSave._masterEditor._codeMirror.setValue(savedDocText);
+                        docToSave._masterEditor._codeMirror.refresh();
+                        docToSave._masterEditor._codeMirror.clearHistory();
 
+                        // Writing unsaved changes to file and restoring clean status to doc 
+                        FileUtils.writeText(docToSave.file, savedDocText, force)
+                            .done(function() {
+                                docToSave.notifySaved();
+                                result.resolve();
+                            });
+                        // SHOULD JUST RESET TEXT, SAVE DOCUMENT, AND MARK DOC CLEAN
+                        // PS THEN SINCE DONE WITH DIRTY DOC HANDLING, NEXT WORK ON MARKING DOC CLEAN WHEN RESETTING CLEAN DOCS TOO
+                    }
+                });
+        }
+        
         function handleContentsModified() {
             Dialogs.showModalDialog(
                 DefaultDialogs.DIALOG_ID_ERROR,
@@ -791,7 +837,27 @@ define(function (require, exports, module) {
                     }
                 });
         }
-
+        
+        function LocalHistoryTrySave(savedDocText, timestamp) {
+            // We don't want normalized line endings, so it's important to pass true to getText()
+            var curDocText = docToSave.getText(true);
+            
+            // Replace latest Local History entry with current doc text
+            Db.sendDocText(curDocText, docToSave.file._path, timestamp);
+            
+            // Reset document text in active editor
+            docToSave._masterEditor._codeMirror.setValue(savedDocText);
+            docToSave._masterEditor._codeMirror.refresh();
+            docToSave._masterEditor._codeMirror.clearHistory();
+                    
+            // Writing unsaved changes to file and restoring clean status to doc 
+            FileUtils.writeText(file, curDocText, force)
+                .done(function() {
+                    docToSave.notifySaved();
+                    result.resolve();
+                });
+        }
+        
         function trySave() {
             // We don't want normalized line endings, so it's important to pass true to getText()
             FileUtils.writeText(file, docToSave.getText(true), force)
@@ -821,10 +887,10 @@ define(function (require, exports, module) {
                                 var decodedSavedDocTxt = He.decode(window.RawDeflate.inflate(results.rows[lastKey].str__DocTxt));
 
                                 if (docTextToStore !== decodedSavedDocTxt) {
-                                    Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                                    handleSaveChanges();
                                 }
                             } else {
-                                Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                                handleSaveChanges();
                             }
                         },
                         function (tx, error) {
@@ -833,7 +899,7 @@ define(function (require, exports, module) {
                     );
                 });
             }
-
+            
             if (docToSave.keepChangesTime) {
                 // The user has decided to keep conflicting changes in the editor. Check to make sure
                 // the file hasn't changed since they last decided to do that.
@@ -844,12 +910,9 @@ define(function (require, exports, module) {
                     if (!err && docToSave.keepChangesTime === stat.mtime.getTime()) {
                         // OK, it's safe to overwrite the file even though we never reloaded the latest version,
                         // since the user already said s/he wanted to ignore the disk version.
-                        force = true;
+                        //force = true;
                     }
-                    trySave();
                 });
-            } else {
-                trySave();
             }
         } else {
             result.resolve(file);
@@ -857,9 +920,10 @@ define(function (require, exports, module) {
         result.always(function () {
             MainViewManager.focusActivePane();
         });
+        
         return result.promise();
     }
-
+    
     /**
      * Reverts the Document to the current contents of its file on disk. Discards any unsaved changes
      * in the Document.
@@ -900,6 +964,7 @@ define(function (require, exports, module) {
         exports.trigger(exports.APP_QUIT_CANCELLED);
     }
 
+
     /**
      * Opens the native OS save as dialog and saves document.
      * The original document is reverted in case it was dirty.
@@ -918,7 +983,7 @@ define(function (require, exports, module) {
             saveAsDefaultPath,
             defaultName,
             result = new $.Deferred();
-
+        
         function _doSaveAfterSaveDialog(path) {
             var newFile;
 
@@ -937,7 +1002,7 @@ define(function (require, exports, module) {
             // Replace old document with new one in open editor & workingset
             function openNewFile() {
                 var fileOpenPromise;
-
+    
                 if (FileViewController.getFileSelectionFocus() === FileViewController.PROJECT_MANAGER) {
                     // If selection is in the tree, leave workingset unchanged - even if orig file is in the list
                     fileOpenPromise = FileViewController
@@ -952,7 +1017,7 @@ define(function (require, exports, module) {
                     // Add new file to workingset, and ensure we now redraw (even if index hasn't changed)
                     fileOpenPromise = handleFileAddToWorkingSetAndOpen({fullPath: path, paneId: info.paneId, index: info.index, forceRedraw: true});
                 }
-
+    
                 // always configure editor after file is opened
                 fileOpenPromise.always(function () {
                     _configureEditorAndResolve();
@@ -983,36 +1048,13 @@ define(function (require, exports, module) {
             }
             newFile = FileSystem.getFileForPath(path);
             newFile._encoding = doc.file._encoding;
-
+    
             // Save as warns you when you're about to overwrite a file, so we
             // explicitly allow "blind" writes to the filesystem in this case,
             // ignoring warnings about the contents being modified outside of
             // the editor.
             FileUtils.writeText(newFile, doc.getText(true), true)
                 .done(function () {
-                    if (localHistory) {
-                        Db.database.transaction(function (tx) {
-                            tx.executeSql('SELECT * FROM local_history_doctxt WHERE sessionId=?',
-                                [newFile._path],
-                                function (tx, results) {
-                                    var fileTimestamp = new Date(),
-                                        docTextToStore = doc.getText(true);
-                                
-                                    if (results.rows.length === 0) {
-                                        Db.sendDocText(docTextToStore, newFile._path, fileTimestamp);
-                                    } else {
-                                        // Filepath is not new despite file itself being new
-                                        // Purge all existing records, then save
-                                        Db.delRows(newFile._path, null, true)
-                                            .done(Db.sendDocText(docTextToStore, newFile._path, fileTimestamp));
-                                    }
-                                },
-                                function (tx, error) {
-                                    console.log(error);
-                                }
-                            );
-                        });
-                    }
                     // If there were unsaved changes before Save As, they don't stay with the old
                     // file anymore - so must revert the old doc to match disk content.
                     // Only do this if the doc was dirty: _doRevert on a file that is not dirty and
@@ -1041,7 +1083,7 @@ define(function (require, exports, module) {
             origPath = doc.file.fullPath;
             // If the document is an untitled document, we should default to project root.
             if (doc.isUntitled()) {
-                // (Issue #4489) iff we're saving an untitled document, go ahead and switch to this document
+                // (Issue #4489) if we're saving an untitled document, go ahead and switch to this document
                 //   in the editor, so that if we're, for example, saving several files (ie. Save All),
                 //   then the user can visually tell which document we're currently prompting them to save.
                 var info = MainViewManager.findInAllWorkingSets(origPath).shift();
@@ -1066,11 +1108,7 @@ define(function (require, exports, module) {
                     }
                 }
             }
-            FileSystem.showSaveDialog(
-                Strings.SAVE_FILE_AS,
-                saveAsDefaultPath, 
-                defaultName, 
-                function (err, selectedPath) {
+            FileSystem.showSaveDialog(Strings.SAVE_FILE_AS, saveAsDefaultPath, defaultName, function (err, selectedPath) {
                 if (!err) {
                     if (selectedPath) {
                         _doSaveAfterSaveDialog(selectedPath);
@@ -1100,6 +1138,7 @@ define(function (require, exports, module) {
         var activeEditor = EditorManager.getActiveEditor(),
             activeDoc = activeEditor && activeEditor.document,
             doc = (commandData && commandData.doc) || activeDoc,
+            savedDocText = commandData.savedDocText,
             settings;
 
         if (doc && !doc.isSaving) {
@@ -1113,7 +1152,7 @@ define(function (require, exports, module) {
 
                 return _doSaveAs(doc, settings);
             } else {
-                return doSave(doc);
+                return doSave(doc, false, savedDocText);
             }
         }
 
@@ -1881,60 +1920,5 @@ define(function (require, exports, module) {
     // Define public API
     exports.showFileOpenError = showFileOpenError;
     exports.APP_QUIT_CANCELLED = APP_QUIT_CANCELLED;
-
-    // Deprecated commands
-    CommandManager.register(Strings.CMD_ADD_TO_WORKING_SET,          Commands.FILE_ADD_TO_WORKING_SET,        handleFileAddToWorkingSet);
-    CommandManager.register(Strings.CMD_FILE_OPEN,                   Commands.FILE_OPEN,                      handleDocumentOpen);
-
-    // New commands
-    CommandManager.register(Strings.CMD_ADD_TO_WORKING_SET,          Commands.CMD_ADD_TO_WORKINGSET_AND_OPEN, handleFileAddToWorkingSetAndOpen);
-    CommandManager.register(Strings.CMD_FILE_OPEN,                   Commands.CMD_OPEN,                       handleFileOpen);
-
-    // File Commands
-    CommandManager.register(Strings.CMD_FILE_NEW_UNTITLED,           Commands.FILE_NEW_UNTITLED,              handleFileNew);
-    CommandManager.register(Strings.CMD_FILE_NEW,                    Commands.FILE_NEW,                       handleFileNewInProject);
-    CommandManager.register(Strings.CMD_FILE_NEW_FOLDER,             Commands.FILE_NEW_FOLDER,                handleNewFolderInProject);
-    CommandManager.register(Strings.CMD_FILE_SAVE,                   Commands.FILE_SAVE,                      handleFileSave);
-    CommandManager.register(Strings.CMD_FILE_SAVE_ALL,               Commands.FILE_SAVE_ALL,                  handleFileSaveAll);
-    CommandManager.register(Strings.CMD_FILE_SAVE_AS,                Commands.FILE_SAVE_AS,                   handleFileSaveAs);
-    CommandManager.register(Strings.CMD_FILE_RENAME,                 Commands.FILE_RENAME,                    handleFileRename);
-    CommandManager.register(Strings.CMD_FILE_DELETE,                 Commands.FILE_DELETE,                    handleFileDelete);
-
-    // Close Commands
-    CommandManager.register(Strings.CMD_FILE_CLOSE,                  Commands.FILE_CLOSE,                     handleFileClose);
-    CommandManager.register(Strings.CMD_FILE_CLOSE_ALL,              Commands.FILE_CLOSE_ALL,                 handleFileCloseAll);
-    CommandManager.register(Strings.CMD_FILE_CLOSE_LIST,             Commands.FILE_CLOSE_LIST,                handleFileCloseList);
-
-    // Traversal
-    CommandManager.register(Strings.CMD_NEXT_DOC,                    Commands.NAVIGATE_NEXT_DOC,              handleGoNextDoc);
-    CommandManager.register(Strings.CMD_PREV_DOC,                    Commands.NAVIGATE_PREV_DOC,              handleGoPrevDoc);
-
-    CommandManager.register(Strings.CMD_NEXT_DOC_LIST_ORDER,         Commands.NAVIGATE_NEXT_DOC_LIST_ORDER,   handleGoNextDocListOrder);
-    CommandManager.register(Strings.CMD_PREV_DOC_LIST_ORDER,         Commands.NAVIGATE_PREV_DOC_LIST_ORDER,   handleGoPrevDocListOrder);
-
-    // Special Commands
-    CommandManager.register(showInOS,                                Commands.NAVIGATE_SHOW_IN_OS,            handleShowInOS);
-    CommandManager.register(quitString,                              Commands.FILE_QUIT,                      handleFileQuit);
-    CommandManager.register(Strings.CMD_SHOW_IN_TREE,                Commands.NAVIGATE_SHOW_IN_FILE_TREE,     handleShowInTree);
-
-    // These commands have no UI representation and are only used internally
-    CommandManager.registerInternal(Commands.APP_ABORT_QUIT,            handleAbortQuit);
-    CommandManager.registerInternal(Commands.APP_BEFORE_MENUPOPUP,      handleBeforeMenuPopup);
-    CommandManager.registerInternal(Commands.FILE_CLOSE_WINDOW,         handleFileCloseWindow);
-    
-    // Disable ability to reload Brackets for 4 seconds on load to help prevent accidental crashes while app has not completed the prior reload (Issue #10779)
-    AppInit.appReady(function () {
-        setTimeout(function () {
-            CommandManager.registerInternal(Commands.APP_RELOAD,                handleReload); CommandManager.registerInternal(Commands.APP_RELOAD_WITHOUT_EXTS,   handleReloadWithoutExts);
-       }, 4000);
-    });
-    
-    // Listen for changes that require updating the editor titlebar
-    ProjectManager.on("projectOpen", _updateTitle);
-    DocumentManager.on("dirtyFlagChange", handleDirtyChange);
-    DocumentManager.on("fileNameChange", handleCurrentFileChange);
-    MainViewManager.on("currentFileChange", handleCurrentFileChange);
-
-    // Reset the untitled document counter before changing projects
-    ProjectManager.on("beforeProjectClose", function () { _nextUntitledIndexToUse = 1; });
+    exports.handleFileSave = handleFileSave;
 });

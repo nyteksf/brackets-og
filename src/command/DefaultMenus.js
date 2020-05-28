@@ -136,7 +136,6 @@ define(function (require, exports, module) {
         menu.addMenuItem(Commands.CMD_SKIP_CURRENT_MATCH);
         menu.addMenuDivider();
         menu.addMenuItem(Commands.CMD_FIND_IN_FILES);
-        menu.addMenuItem(Commands.CMD_FIND_ALL_REFERENCES);
         menu.addMenuDivider();
         menu.addMenuItem(Commands.CMD_REPLACE);
         menu.addMenuItem(Commands.CMD_REPLACE_IN_FILES);
@@ -173,7 +172,6 @@ define(function (require, exports, module) {
         menu.addMenuItem(Commands.NAVIGATE_QUICK_OPEN);
         menu.addMenuItem(Commands.NAVIGATE_GOTO_LINE);
         menu.addMenuItem(Commands.NAVIGATE_GOTO_DEFINITION);
-        menu.addMenuItem(Commands.NAVIGATE_GOTO_DEFINITION_PROJECT);
         menu.addMenuItem(Commands.NAVIGATE_JUMPTO_DEFINITION);
         menu.addMenuItem(Commands.NAVIGATE_GOTO_FIRST_PROBLEM);
         menu.addMenuDivider();
@@ -284,14 +282,17 @@ define(function (require, exports, module) {
         // editor_cmenu.addMenuItem(Commands.NAVIGATE_JUMPTO_DEFINITION);
         editor_cmenu.addMenuItem(Commands.TOGGLE_QUICK_EDIT);
         editor_cmenu.addMenuItem(Commands.TOGGLE_QUICK_DOCS);
-        editor_cmenu.addMenuItem(Commands.CMD_FIND_ALL_REFERENCES);
+		
         editor_cmenu.addMenuDivider();
         editor_cmenu.addMenuItem(Commands.EDIT_CUT);
         editor_cmenu.addMenuItem(Commands.EDIT_COPY);
         editor_cmenu.addMenuItem(Commands.EDIT_PASTE);
-
-        editor_cmenu.addMenuDivider();
-        editor_cmenu.addMenuItem(Commands.EDIT_SELECT_ALL);
+		
+		editor_cmenu.addMenuDivider();
+		editor_cmenu.addMenuItem(Commands.TOGGLE_LOCAL_HISTORY);
+		
+		editor_cmenu.addMenuDivider();
+		editor_cmenu.addMenuItem(Commands.EDIT_SELECT_ALL);
 
         var inline_editor_cmenu = Menus.registerContextMenu(Menus.ContextMenuIds.INLINE_EDITOR_MENU);
         inline_editor_cmenu.addMenuItem(Commands.TOGGLE_QUICK_EDIT);

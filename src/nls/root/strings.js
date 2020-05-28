@@ -133,6 +133,16 @@ define({
     "SAVE_CLOSE_TITLE"                  : "Save Changes",
     "SAVE_CLOSE_MESSAGE"                : "Do you want to save the changes you made in the document <span class='dialog-filename'>{0}</span>?",
     "SAVE_CLOSE_MULTI_MESSAGE"          : "Do you want to save your changes to the following files?",
+    "LOCAL_HISTORY_TITLE"               : "Local History",
+    "LOCAL_HISTORY_MESSAGE"             : "Would you like to view Local History for document <span class='dialog-filename'>{0}</span>?",
+    "LOCAL_HISTORY_SAVE_MESSAGE"        : "Would you like to save your changes to the currently open document before overwriting?",
+    "LOCAL_HISTORY_OPEN_FILE_MESSAGE"   : "Please choose a version of your document below, and click 'Open File' to proceed",
+    "LOCAL_HISTORY_EMPTY_MESSAGE"       : "No prior saved versions found. Local History is currently empty for document <span class='dialog-filename'>{0}</span>.",
+    "LOCAL_HISTORY_DEL_CONFIRM_MESSAGE" : "Deletion of saved document has been successful.",
+    "LOCAL_HISTORY_DEL_PROMPT_MESSAGE"  : "Are you sure you want to permanently delete this item?",
+    "LOCAL_HISTORY_DELALL_MESSAGE"      : "Are you sure you want to delete the entire Local History archive for the current open document?",
+    "LOCAL_HISTORY_DELALL_CONFIRM_MESSAGE" : "All versions of the current document in Local History have been successfully deleted.",
+    
     "EXT_MODIFIED_TITLE"                : "External Changes",
     "CONFIRM_DELETE_TITLE"              : "Confirm Delete",
     "CONFIRM_FILE_DELETE"               : "Are you sure you want to delete the file <span class='dialog-filename'>{0}</span>?",
@@ -151,10 +161,12 @@ define({
     "OK"                                : "OK",
     "CANCEL"                            : "Cancel",
     "DONT_SAVE"                         : "Don't Save",
+    "OVERWRITE"                         : "Overwrite",
+    "SAVE_AND_OVERWRITE"                : "Save and Overwrite",
     "SAVE"                              : "Save",
     "SAVE_AS"                           : "Save As\u2026",
-    "SAVE_AND_OVERWRITE"                : "Overwrite",
     "DELETE"                            : "Delete",
+    "DELETE_ALL"                        : "Delete All",
     "BUTTON_YES"                        : "Yes",
     "BUTTON_NO"                         : "No",
 
@@ -177,7 +189,7 @@ define({
     "REPLACE_WITHOUT_UNDO_WARNING_TITLE": "Replace Without Undo",
     "REPLACE_WITHOUT_UNDO_WARNING"      : "Because more than {0} files need to be changed, {APP_NAME} will modify unopened files on disk.<br />You won't be able to undo replacements in those files.",
     "BUTTON_REPLACE_WITHOUT_UNDO"       : "Replace Without Undo",
-
+    
     "OPEN_FILE"                         : "Open File",
     "SAVE_FILE_AS"                      : "Save File",
     "CHOOSE_FOLDER"                     : "Choose a folder",
@@ -419,10 +431,10 @@ define({
     "CMD_QUICK_OPEN"                      : "Quick Open",
     "CMD_GOTO_LINE"                       : "Go to Line",
     "CMD_GOTO_DEFINITION"                 : "Quick Find Definition",
-    "CMD_GOTO_DEFINITION_PROJECT"         : "Quick Find Definition in Project",
     "CMD_GOTO_FIRST_PROBLEM"              : "Go to First Problem",
     "CMD_TOGGLE_QUICK_EDIT"               : "Quick Edit",
     "CMD_TOGGLE_QUICK_DOCS"               : "Quick Docs",
+	"CMD_TOGGLE_LOCAL_HISTORY"			  : "Local History",
     "CMD_QUICK_EDIT_PREV_MATCH"           : "Previous Match",
     "CMD_QUICK_EDIT_NEXT_MATCH"           : "Next Match",
     "CMD_CSS_QUICK_EDIT_NEW_RULE"         : "New Rule",
@@ -651,10 +663,10 @@ define({
     // extensions/default/HealthData
     "HEALTH_DATA_NOTIFICATION"                  : "Health Report Preferences",
     "HEALTH_FIRST_POPUP_TITLE"                  : "{APP_NAME} Health Report",
-    "HEALTH_DATA_DO_TRACK"                      : "Share pseudonymous information on how I use {APP_NAME}",
-    "HEALTH_DATA_NOTIFICATION_MESSAGE"          : "In order to improve {APP_NAME}, we periodically send limited, <strong>pseudonymous</strong> statistics to Adobe about how you use {APP_NAME}. This information helps prioritize features, find bugs, and spot usability issues.<br><br>You can see your data or choose not to share data by selecting <strong>Help > Health Report</strong>.<br><br><a href='https://github.com/adobe/brackets/wiki/Project-Health-Data'>Learn more about {APP_NAME} Health Report</a>",
+    "HEALTH_DATA_DO_TRACK"                      : "Share anonymous information on how I use {APP_NAME}",
+    "HEALTH_DATA_NOTIFICATION_MESSAGE"          : "In order to improve {APP_NAME}, we periodically send limited, <strong>anonymous</strong> statistics to Adobe about how you use {APP_NAME}. This information helps prioritize features, find bugs, and spot usability issues.<br><br>You can see your data or choose not to share data by selecting <strong>Help > Health Report</strong>.<br><br><a href='https://github.com/adobe/brackets/wiki/Health-Data'>Learn more about {APP_NAME} Health Report</a>",
     "HEALTH_DATA_PREVIEW"                       : "{APP_NAME} Health Report",
-    "HEALTH_DATA_PREVIEW_INTRO"                 : "<p>In order to improve {APP_NAME}, we periodically send limited, <strong>pseudonymous</strong> statistics to Adobe about how you use {APP_NAME}. This information helps prioritize features, find bugs, and spot usability issues. <a href='https://github.com/adobe/brackets/wiki/Project-Health-Data'>Learn more about {APP_NAME} Health Report</a> and how it benefits the {APP_NAME} community while protecting your privacy.</p><p>Below is a preview of the data that will be sent in your next Health Report <em>if</em> it is enabled.</p>",
+    "HEALTH_DATA_PREVIEW_INTRO"                 : "<p>In order to improve {APP_NAME}, we periodically send limited, <strong>anonymous</strong> statistics to Adobe about how you use {APP_NAME}. This information helps prioritize features, find bugs, and spot usability issues. <a href='https://github.com/adobe/brackets/wiki/Health-Data'>Learn more about {APP_NAME} Health Report</a> and how it benefits the {APP_NAME} community while protecting your privacy.</p><p>Below is a preview of the data that will be sent in your next Health Report <em>if</em> it is enabled.</p>",
 
     // extensions/default/InlineTimingFunctionEditor
     "INLINE_TIMING_EDITOR_TIME"                 : "Time",
@@ -873,44 +885,8 @@ define({
     "DESCRIPTION_AUTO_UPDATE"                        : "Enable/disable Brackets Auto-update",
     "AUTOUPDATE_ERROR"                               : "Error!",
     "AUTOUPDATE_IN_PROGRESS"                         : "An update is already in progress.",
-
+    
     "NUMBER_WITH_PERCENTAGE"                         : "{0}%",
     // Strings for Related Files
-    "CMD_FIND_RELATED_FILES"                         : "Find Related Files",
-
-    ///String for Php Tooling Extensions
-    "PHP_VERSION_INVALID"                            : "Error parsing PHP version. Please check the output of the “php –version” command.",
-    "PHP_UNSUPPORTED_VERSION"                        : "Install PHP7 runtime for enabling PHP-related tooling such as Code Hints, Parameter Hints, Jump To Definition and more. Version found: {0}",
-    "PHP_EXECUTABLE_NOT_FOUND"                       : "PHP runtime not found. Install the PHP7 runtime and update “executablePath” in PHP Preferences appropriately. This enables PHP-related tooling such as Code Hints, Parameter Hints, Jump To Definition and more.",
-    "PHP_PROCESS_SPAWN_ERROR"                        : "Error code {0} encountered while starting the PHP process.",
-    "PHP_SERVER_ERROR_TITLE"                         : "Error",
-    "PHP_SERVER_MEMORY_LIMIT_INVALID"                : "The memory limit you provided is invalid. Review the PHP preferences to set the correct value.",
-    "DESCRIPTION_PHP_TOOLING_CONFIGURATION"          : "PHP Tooling default configuration settings",
-    "OPEN_PREFERENNCES"                              : "Open Preferences",
-
-    //Strings for LanguageTools Preferences
-    "LANGUAGE_TOOLS_PREFERENCES"                     : "Preferences for Language Tools",
-
-    "FIND_ALL_REFERENCES"                            : "Find All References",
-    "REFERENCES_IN_FILES"                            : "references",
-    "REFERENCE_IN_FILES"                             : "reference",
-    "REFERENCES_NO_RESULTS"                          : "No References available for current cursor position",
-
-    "CMD_FIND_DOCUMENT_SYMBOLS"                      : "Find Document Symbols",
-    "CMD_FIND_PROJECT_SYMBOLS"                       : "Find Project Symbols",
-
-   // Remote debugging enabled
-    "REMOTE_DEBUGGING_ENABLED"                       : "Remote debugging enabled on localhost:",
-
-   // Remote debugging port argument is invalid
-    "REMOTE_DEBUGGING_PORT_INVALID"                  : "Cannot enable remote debugging on port {0}. Port numbers should be between {1} and {2}.",
-    
-    //Associate File Type to External App
-    "DESCRIPTION_EXTERNAL_APPLICATION_ASSOCIATE"     : "Mappings for file extension to external applications. Syntax: \"<file_type>\": \"<default|applicationName|ApplicationPath>\", Use \"default\" to open files in system default application for the file type.",
-
-    "ASSOCIATE_GRAPHICS_FILE_TO_DEFAULT_APP_TITLE"   : "Open Graphic Files in External Editors.",
-    "ASSOCIATE_GRAPHICS_FILE_TO_DEFAULT_APP_MSG"     : "Your current folder has graphic file types which are not supported by {APP_NAME}.<br/>You can now associate specific file types with external editors. Once associated, you can open graphic files like .xd, .psd, .jpg, .png, .ai, .svg in their default applications by double clicking on the files in File Tree.<br/><br/>Please click on ‘Ok’ button to associate the graphic file types with their respective default applications.",
-    "ASSOCIATE_GRAPHICS_FILE_TO_DEFAULT_APP_CNF_MSG" : "Following file types have been successfully associated with default applications.<br/>{0} You have the option to change your preference on whether you delete/add new file type associations in brackets.json by going to “Debug->Open Preferences File” menu."
-
-
+    "CMD_FIND_RELATED_FILES"                         : "Find Related Files"
 });
