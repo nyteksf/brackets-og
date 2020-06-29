@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2012 - present Adobe Systems Incorporated. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -57,7 +57,10 @@ define(function (require, exports, module) {
         StatusBar           = require("widgets/StatusBar"),
         WorkspaceManager    = require("view/WorkspaceManager"),
         LanguageManager     = require("language/LanguageManager"),
-        _                   = require("thirdparty/lodash");
+        _                   = require("thirdparty/lodash"),
+        He                  = require("thirdparty/he"),
+        CompressionUtils    = require("thirdparty/rawdeflate"),
+        Db                  = require("editor/Db");
 
     /**
      * Handlers for commands related to document handling (opening, saving, etc.)
@@ -137,7 +140,9 @@ define(function (require, exports, module) {
         excludeFromHints: true
     });
     EventDispatcher.makeEventDispatcher(exports);
-
+    var LOCAL_HISTORY = "localHistory",
+        localHistory  = PreferencesManager.get(LOCAL_HISTORY);
+    
     /**
      * Event triggered when File Save is cancelled, when prompted to save dirty files
      */
@@ -689,15 +694,6 @@ define(function (require, exports, module) {
         var doc = DocumentManager.createUntitledDocument(_nextUntitledIndexToUse++, defaultExtension);
         MainViewManager._edit(MainViewManager.ACTIVE_PANE, doc);
 
-        HealthLogger.sendAnalyticsData(
-            HealthLogger.commonStrings.USAGE +
-            HealthLogger.commonStrings.FILE_OPEN +
-            HealthLogger.commonStrings.FILE_NEW,
-            HealthLogger.commonStrings.USAGE,
-            HealthLogger.commonStrings.FILE_OPEN,
-            HealthLogger.commonStrings.FILE_NEW
-        );
-
         return new $.Deferred().resolve(doc).promise();
     }
 
@@ -743,8 +739,11 @@ define(function (require, exports, module) {
      */
     function doSave(docToSave, force) {
         var result = new $.Deferred(),
-            file = docToSave.file;
-
+            file = docToSave.file,
+            filePath = file._path,
+            docTextToStore = docToSave._masterEditor._codeMirror.getValue(),
+            fileTimestamp  = new Date();
+        
         function handleError(error) {
             _showSaveFileError(error, file.fullPath)
                 .done(function () {
@@ -797,7 +796,6 @@ define(function (require, exports, module) {
                 .done(function () {
                     docToSave.notifySaved();
                     result.resolve(file);
-                    HealthLogger.fileSaved(docToSave);
                 })
                 .fail(function (err) {
                     if (err === FileSystemError.CONTENTS_MODIFIED) {
@@ -809,6 +807,58 @@ define(function (require, exports, module) {
         }
 
         if (docToSave.isDirty) {
+            /*
+            if (localHistory) {
+                Db.database.transaction(function (tx) {
+                    tx.executeSql('SELECT * FROM local_history_doctxt WHERE sessionId=?',
+                        [filePath],
+                        function (tx, results) {
+                            if (results.rows.length > 0) {
+                                // Diff latest save to prevent accumulation of identical copies
+                                var lastKey = Object.keys(results.rows).pop();
+
+                                var decodedSavedDocTxt = He.decode(window.RawDeflate.inflate(results.rows[lastKey].str__DocTxt));
+
+                                if (docTextToStore !== decodedSavedDocTxt) {
+                                    Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                                }
+                            } else {
+                                Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                            }
+                        },
+                        function (tx, error) {
+                            console.log(error);
+                        }
+                    );
+                });
+            }
+            */
+            
+            if (localHistory) {
+                Db.database.transaction(function (tx) {
+                    tx.executeSql('SELECT * FROM local_history_doctxt WHERE sessionId=?',
+                        [filePath],
+                        function (tx, results) {
+                            if (results.rows.length > 0) {
+                                // Diff latest save to prevent accumulation of identical copies
+                                var lastKey = Object.keys(results.rows).pop();
+
+                                var decodedSavedDocTxt = He.decode(window.RawDeflate.inflate(results.rows[lastKey].str__DocTxt));
+
+                                if (docTextToStore !== decodedSavedDocTxt) {
+                                    Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                                }
+                            } else {
+                                Db.sendDocText(docTextToStore, filePath, fileTimestamp);
+                            }
+                        },
+                        function (tx, error) {
+                            console.log(error);
+                        }
+                    );
+                });
+            }
+
             if (docToSave.keepChangesTime) {
                 // The user has decided to keep conflicting changes in the editor. Check to make sure
                 // the file hasn't changed since they last decided to do that.
@@ -874,7 +924,6 @@ define(function (require, exports, module) {
     function dispatchAppQuitCancelledEvent() {
         exports.trigger(exports.APP_QUIT_CANCELLED);
     }
-
 
     /**
      * Opens the native OS save as dialog and saves document.
@@ -966,6 +1015,29 @@ define(function (require, exports, module) {
             // the editor.
             FileUtils.writeText(newFile, doc.getText(true), true)
                 .done(function () {
+                    if (localHistory) {
+                        Db.database.transaction(function (tx) {
+                            tx.executeSql('SELECT * FROM local_history_doctxt WHERE sessionId=?',
+                                [newFile._path],
+                                function (tx, results) {
+                                    var fileTimestamp = new Date(),
+                                        docTextToStore = doc.getText(true);
+                                
+                                    if (results.rows.length === 0) {
+                                        Db.sendDocText(docTextToStore, newFile._path, fileTimestamp);
+                                    } else {
+                                        // Filepath is not new despite file itself being new
+                                        // Purge all existing records, then save
+                                        Db.delRows(newFile._path, null, true)
+                                            .done(Db.sendDocText(docTextToStore, newFile._path, fileTimestamp));
+                                    }
+                                },
+                                function (tx, error) {
+                                    console.log(error);
+                                }
+                            );
+                        });
+                    }
                     // If there were unsaved changes before Save As, they don't stay with the old
                     // file anymore - so must revert the old doc to match disk content.
                     // Only do this if the doc was dirty: _doRevert on a file that is not dirty and
@@ -977,7 +1049,6 @@ define(function (require, exports, module) {
                     } else {
                         openNewFile();
                     }
-                    HealthLogger.fileSaved(doc);
                 })
                 .fail(function (error) {
                     _showSaveFileError(error, path)
@@ -1020,7 +1091,11 @@ define(function (require, exports, module) {
                     }
                 }
             }
-            FileSystem.showSaveDialog(Strings.SAVE_FILE_AS, saveAsDefaultPath, defaultName, function (err, selectedPath) {
+            FileSystem.showSaveDialog(
+                Strings.SAVE_FILE_AS,
+                saveAsDefaultPath, 
+                defaultName, 
+                function (err, selectedPath) {
                 if (!err) {
                     if (selectedPath) {
                         _doSaveAfterSaveDialog(selectedPath);
@@ -1050,8 +1125,10 @@ define(function (require, exports, module) {
         var activeEditor = EditorManager.getActiveEditor(),
             activeDoc = activeEditor && activeEditor.document,
             doc = (commandData && commandData.doc) || activeDoc,
+            savedDocText,
             settings;
 
+    
         if (doc && !doc.isSaving) {
             if (doc.isUntitled()) {
                 if (doc === activeDoc) {
@@ -1063,6 +1140,10 @@ define(function (require, exports, module) {
 
                 return _doSaveAs(doc, settings);
             } else {
+                if (savedDocText) {         
+                    return doSave(doc, false, savedDocText);
+                }
+                
                 return doSave(doc);
             }
         }
@@ -1197,7 +1278,6 @@ define(function (require, exports, module) {
         function doClose(file) {
             if (!promptOnly) {
                 MainViewManager._close(paneId, file);
-                HealthLogger.fileClosed(file);
             }
         }
 
@@ -1642,38 +1722,33 @@ define(function (require, exports, module) {
         if (brackets.inBrowser) {
             result.resolve();
         } else {
-            brackets.app.getRemoteDebuggingPort(function (err, port){
-                if ((!err) && port && port > 0) {
-                    Inspector.getDebuggableWindows("127.0.0.1", port)
-                        .fail(result.reject)
-                        .done(function (response) {
-                            var page = response[0];
-                            if (!page || !page.webSocketDebuggerUrl) {
-                                result.reject();
-                                return;
-                            }
-                            var _socket = new WebSocket(page.webSocketDebuggerUrl);
-                            // Disable the cache
-                            _socket.onopen = function _onConnect() {
-                                _socket.send(JSON.stringify({ id: 1, method: "Network.setCacheDisabled", params: { "cacheDisabled": true } }));
-                            };
-                            // The first message will be the confirmation => disconnected to allow remote debugging of Brackets
-                            _socket.onmessage = function _onMessage(e) {
-                                _socket.close();
-                                result.resolve();
-                            };
-                            // In case of an error
-                            _socket.onerror = result.reject;
-                        });
-                } else {
-                    result.reject();
-                }
-            });
+            var port = brackets.app.getRemoteDebuggingPort ? brackets.app.getRemoteDebuggingPort() : 9234;
+            Inspector.getDebuggableWindows("127.0.0.1", port)
+                .fail(result.reject)
+                .done(function (response) {
+                    var page = response[0];
+                    if (!page || !page.webSocketDebuggerUrl) {
+                        result.reject();
+                        return;
+                    }
+                    var _socket = new WebSocket(page.webSocketDebuggerUrl);
+                    // Disable the cache
+                    _socket.onopen = function _onConnect() {
+                        _socket.send(JSON.stringify({ id: 1, method: "Network.setCacheDisabled", params: { "cacheDisabled": true } }));
+                    };
+                    // The first message will be the confirmation => disconnected to allow remote debugging of Brackets
+                    _socket.onmessage = function _onMessage(e) {
+                        _socket.close();
+                        result.resolve();
+                    };
+                    // In case of an error
+                    _socket.onerror = result.reject;
+                });
         }
 
         return result.promise();
     }
-
+    
     /**
     * Does a full reload of the browser window
     * @param {string} href The url to reload into the window
@@ -1718,6 +1793,20 @@ define(function (require, exports, module) {
     }
 
     /**
+     * Debounce function decreases odds of crash on reload (Issue #10779)
+     */
+    var timer = null;
+
+    function debounce(fn, delay, arg) {
+	return function () {
+            clearTimeout(timer);
+            timer = setTimeout(function () {
+                fn(arg);
+            }, delay || 500);
+        };
+    };
+
+    /**
      * Restarts brackets Handler
      * @param {boolean=} loadWithoutExtensions - true to restart without extensions,
      *                                           otherwise extensions are loadeed as it is durning a typical boot
@@ -1749,9 +1838,9 @@ define(function (require, exports, module) {
 
         // Give Mac native menus extra time to update shortcut highlighting.
         // Prevents the menu highlighting from getting messed up after reload.
-        window.setTimeout(function () {
-            browserReload(href);
-        }, 100);
+        var debouncedBrowserReload = debounce(browserReload, null, href);
+
+        debouncedBrowserReload();
     }
 
     /** Reload Without Extensions commnad handler **/
@@ -1823,7 +1912,6 @@ define(function (require, exports, module) {
     // Define public API
     exports.showFileOpenError = showFileOpenError;
     exports.APP_QUIT_CANCELLED = APP_QUIT_CANCELLED;
-    
 
     // Deprecated commands
     CommandManager.register(Strings.CMD_ADD_TO_WORKING_SET,          Commands.FILE_ADD_TO_WORKING_SET,        handleFileAddToWorkingSet);
@@ -1864,9 +1952,14 @@ define(function (require, exports, module) {
     CommandManager.registerInternal(Commands.APP_ABORT_QUIT,            handleAbortQuit);
     CommandManager.registerInternal(Commands.APP_BEFORE_MENUPOPUP,      handleBeforeMenuPopup);
     CommandManager.registerInternal(Commands.FILE_CLOSE_WINDOW,         handleFileCloseWindow);
-    CommandManager.registerInternal(Commands.APP_RELOAD,                handleReload);
-    CommandManager.registerInternal(Commands.APP_RELOAD_WITHOUT_EXTS,   handleReloadWithoutExts);
-
+    
+    // Disable ability to reload Brackets for 4 seconds on load to help prevent accidental crashes while app has not completed the prior reload (Issue #10779)
+    AppInit.appReady(function () {
+        setTimeout(function () {
+            CommandManager.registerInternal(Commands.APP_RELOAD,                handleReload); CommandManager.registerInternal(Commands.APP_RELOAD_WITHOUT_EXTS,   handleReloadWithoutExts);
+       }, 4000);
+    });
+    
     // Listen for changes that require updating the editor titlebar
     ProjectManager.on("projectOpen", _updateTitle);
     DocumentManager.on("dirtyFlagChange", handleDirtyChange);

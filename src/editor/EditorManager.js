@@ -66,7 +66,17 @@ define(function (require, exports, module) {
         InlineTextEditor    = require("editor/InlineTextEditor").InlineTextEditor,
         Strings             = require("strings"),
         LanguageManager     = require("language/LanguageManager"),
-        DeprecationWarning  = require("utils/DeprecationWarning");
+        DeprecationWarning  = require("utils/DeprecationWarning"),
+        CompressionUtils    = require("thirdparty/rawinflate"),
+        CompressionUtils    = require("thirdparty/rawdeflate"),
+        He		            = require("thirdparty/he"),
+        Dialogs             = require("widgets/Dialogs"),
+        DefaultDialogs      = require("widgets/DefaultDialogs"),
+        FileViewController  = require("project/FileViewController"),
+        StringUtils         = require("utils/StringUtils"),
+        FileUtils           = require("file/FileUtils"),
+        LocalHistory        = require("editor/LocalHistory"),
+        Db                  = require("editor/Db");
 
 
     /**
@@ -151,6 +161,9 @@ define(function (require, exports, module) {
 
         exports.trigger("activeEditorChange", current, previous);
     }
+    
+    var LOCAL_HISTORY = "localHistory",
+        localHistory  = PreferencesManager.get(LOCAL_HISTORY);
 
     /**
      * Current File Changed handler
@@ -267,7 +280,6 @@ define(function (require, exports, module) {
 
         return result.promise();
     }
-
 
     /**
      * Closes any focused inline widget. Else, asynchronously asks providers to create one.
@@ -682,6 +694,222 @@ define(function (require, exports, module) {
     function getActiveEditor() {
         return _lastFocusedEditor;
     }
+    
+    function delallConfirmDialog(pathToOpenFile) {
+        Dialogs.showModalDialog(
+            DefaultDialogs.DIALOG_ID_LOCAL_HISTORY,
+            Strings.LOCAL_HISTORY_TITLE,
+            Strings.LOCAL_HISTORY_DELALL_MESSAGE,
+            [
+                {
+                    className : Dialogs.DIALOG_BTN_CLASS_NORMAL,
+                    id        : Dialogs.DIALOG_BTN_CANCEL,
+                    text      : Strings.CANCEL
+                },
+                {
+                    className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                    id        : Dialogs.DIALOG_BTN_OK,
+                    text      : Strings.DELETE_ALL
+                }
+            ]
+        )
+            .done(function(id) {
+                if (id === Dialogs.DIALOG_BTN_OK) {
+                    Db.delRows(pathToOpenFile, null, true)
+                        .done(function () {
+                            Dialogs.showModalDialog(
+                                DefaultDialogs.DIALOG_ID_LOCAL_HISTORY,
+                                Strings.LOCAL_HISTORY_TITLE,
+                                Strings.LOCAL_HISTORY_DELALL_CONFIRM_MESSAGE,
+                                [
+                                    {
+                                        className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                                        id        : Dialogs.DIALOG_BTN_OK,
+                                        text      : Strings.OK
+                                    }
+                                ]
+                            )
+                                .done(function (id) {
+                                    if (id === Dialogs.DIALOG_BTN_OK) {
+                                        // Do NOOP
+                                    }
+                                });
+                            });
+                        }     
+            });
+    }
+
+    // Verify that dialog truly exists before executing any associated code
+    function checkForOpenDialog(cb) {
+        var intervalId = window.setInterval(function() {
+            if ($(".modal-footer").find(".btn.primary").length > 0) {
+                window.clearInterval(intervalId);
+                cb();
+            }
+        }, 250);
+    };
+
+    /**
+     * Toggles Local History dialog allowing for coarse grained version control
+     */
+	function _toggleLocalHistory() {
+        var savedDocs = [],
+            result = new $.Deferred();
+
+        var pathToOpenFile  = MainViewManager.getCurrentlyViewedPath('first-pane'),
+            doc             = DocumentManager.getOpenDocumentForPath(pathToOpenFile);
+
+        // Ensure doc backed with master editor
+        doc._ensureMasterEditor();
+
+        var filename     = FileUtils.getBaseName(doc.file._path),
+            activePaneId = 'first-pane';
+
+        // Prompt user to open Local History for open document
+        Dialogs.showModalDialog(
+            DefaultDialogs.DIALOG_ID_LOCAL_HISTORY,
+            Strings.LOCAL_HISTORY_TITLE,
+                StringUtils.format(
+                    Strings.LOCAL_HISTORY_MESSAGE,
+                    StringUtils.breakableUrl(filename)
+                ),
+            [
+                {
+                    className : Dialogs.DIALOG_BTN_CLASS_NORMAL,
+                    id        : Dialogs.DIALOG_BTN_CANCEL,
+                    text      : Strings.CANCEL
+                },
+                {
+                    className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                    id        : Dialogs.DIALOG_BTN_OK,
+                    text      : Strings.OK
+                }
+            ]
+        )
+            .done(function (id) {
+                if (id === Dialogs.DIALOG_BTN_CANCEL) {
+                    // Do NOOP
+                    result.reject();
+                } else {
+                    var currentTheme = doc._masterEditor._codeMirror.getOption("theme");
+                    LocalHistory.setUIColors(currentTheme);
+
+                    var limitedItemList = [];
+
+                    checkForOpenDialog(function(){$(".modal-footer").find(".btn.primary").attr("disabled", "disabled");});
+
+                    // GET LIST OF LOCAL HISTORY BACKUPS FOR DIALOG
+                    Db.database.transaction(function (tx) {
+                        tx.executeSql('SELECT str__DocTxt, str__Timestamp FROM local_history_doctxt WHERE sessionId=?',
+                            [pathToOpenFile],
+                            function (tx, results) {
+                                if (results.rows.length > 0) {
+                                    var fileListForDialog = [];
+                                    for (var row in results.rows) {
+                                        var res = results.rows[row];
+                                        if (typeof res === "object") {
+                                            var docData = [];
+                                            docData.push(res.str__DocTxt);
+                                            docData.push(res.str__Timestamp);
+                                            docData.push(pathToOpenFile);
+
+                                            fileListForDialog.push(docData);
+                                        }
+                                    }
+
+                                    // Accept only the latest 10 records displayed to DOM
+                                    if (fileListForDialog.length > 10) {
+                                        for (var i=0, len=10; i<len; i++) {
+                                            limitedItemList.push(fileListForDialog[fileListForDialog.length - 1]);
+                                            fileListForDialog.pop();
+                                        }
+
+                                        for (var i=0, len=fileListForDialog.length; i<len; i=i+1) {
+                                            var table     = "local_history_doctxt",
+                                                filePath  = fileListForDialog[i][2],
+                                                timestamp = fileListForDialog[i][1];
+
+                                            Db.delTableRowDb(table, filePath, timestamp);
+                                        }
+                                    } else { limitedItemList = fileListForDialog; }
+
+                                    // Load second dialog listing Local History files for user selection
+                                    Dialogs.showModalDialog(
+                                        DefaultDialogs.DIALOG_ID_LOCAL_HISTORY,
+                                        Strings.LOCAL_HISTORY_TITLE,
+                                        Strings.LOCAL_HISTORY_OPEN_FILE_MESSAGE + FileUtils.makeDialogClickableFileList(limitedItemList),
+                                        [
+                                            {
+                                                className : Dialogs.DIALOG_BTN_CLASS_LEFT,
+                                                id        : Dialogs.DIALOG_BTN_CANCEL,
+                                                text      : Strings.CANCEL
+                                            },
+                                            {
+                                                className : Dialogs.DIALOG_BTN_CLASS_NORMAL,
+                                                id        : Dialogs.DIALOG_BTN_DELETEALL,
+                                                text      : Strings.DELETE_ALL
+                                            },
+                                            {
+                                                className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                                                id        : Dialogs.DIALOG_BTN_OK,
+                                                text      : Strings.OPEN_FILE
+                                            }
+                                        ]
+                                    )
+                                        .done(function (id) {
+                                            if (id === Dialogs.DIALOG_BTN_CANCEL) {
+                                                setTimeout(function() {
+                                                    $(".modal-footer").find(".btn.primary").removeAttr("disabled");
+                                                }, 500);
+                                                result.reject();
+                                            } 
+                                            else if (id === Dialogs.DIALOG_BTN_DELETEALL) {
+                                                checkForOpenDialog(function(){$(".modal-footer").find(".btn.primary").removeAttr("disabled");});
+                                                delallConfirmDialog(pathToOpenFile);
+                                                result.resolve();
+                                            } else {
+                                                // "File Open" case:
+                                                setTimeout(function() {
+                                                    $(".modal-footer").find(".btn.primary").removeAttr("disabled");
+                                                }, 250);
+                                                result.resolve();
+                                            }
+                                        });
+                                } else {  // No backups for current file in Local History
+                                    checkForOpenDialog(function(){$(".modal-footer").find(".btn.primary").removeAttr("disabled");});
+                                    Dialogs.showModalDialog(
+                                        DefaultDialogs.DIALOG_ID_LOCAL_HISTORY,
+                                        Strings.LOCAL_HISTORY_TITLE,
+                                            StringUtils.format(
+                                                Strings.LOCAL_HISTORY_EMPTY_MESSAGE,
+                                                StringUtils.breakableUrl(filename)
+                                            ),
+                                        [
+                                            {
+                                                className : Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                                                id        : Dialogs.DIALOG_BTN_OK,
+                                                text      : Strings.OK
+                                            }
+                                        ]
+                                    )
+                                        .done(function (id) {
+                                            if (id === Dialogs.DIALOG_BTN_OK) {
+                                                // Do NOOP
+                                                result.reject();
+                                            } 
+                                        });
+                                }
+                            },
+                            function (tx, error) {
+                                console.log(error);
+                            }
+                        );
+                    });
+                }
+            });
+
+            return result.promise();
+    }
 
     /**
      * file removed from pane handler.
@@ -726,6 +954,10 @@ define(function (require, exports, module) {
     CommandManager.register(Strings.CMD_TOGGLE_QUICK_DOCS, Commands.TOGGLE_QUICK_DOCS, function () {
         return _toggleInlineWidget(_inlineDocsProviders, Strings.ERROR_QUICK_DOCS_PROVIDER_NOT_FOUND);
     });
+    
+     if (localHistory) {
+        CommandManager.register(Strings.CMD_TOGGLE_LOCAL_HISTORY, Commands.TOGGLE_LOCAL_HISTORY, _toggleLocalHistory);
+    }
 
     MainViewManager.on("currentFileChange", _handleCurrentFileChange);
     MainViewManager.on("workingSetRemove workingSetRemoveList", _handleRemoveFromPaneView);
@@ -746,6 +978,7 @@ define(function (require, exports, module) {
     exports.closeInlineWidget             = closeInlineWidget;
     exports.openDocument                  = openDocument;
     exports.canOpenPath                   = canOpenPath;
+    exports.checkForOpenDialog            = checkForOpenDialog;
 
     // Convenience Methods
     exports.getActiveEditor               = getActiveEditor;

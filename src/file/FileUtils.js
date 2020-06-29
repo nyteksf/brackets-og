@@ -218,6 +218,34 @@ define(function (require, exports, module) {
                                               "Please use DocumentCommandHandlers.showFileOpenError() instead.");
         return DocumentCommandHandlers.showFileOpenError(name, path);
     }
+    
+    /**
+     * Creates an HTML string from a list of files to be used in the selection of a Local 
+     * History file; allowing for version control.
+     * @param {Array.<string>} Array of filenames with paths to display.
+     */
+    function makeDialogClickableFileList(fileList) {
+        // fileList = [[docText, timestamp, filePath], [docText, timestamp, filePath], ...]    
+
+        // Ensure results display in descending order because adding
+        // 'ORDER BY str__Timestamp DESC' to WebSQL query doesn't work
+        fileList = fileList.sort(function(a, b) {
+            return new Date(a[1]).getTime() < new Date(b[1]).getTime();
+        });
+
+        var result = "<div class='localHistoryContainer'>";
+	    result    += "<ul class='clickable-dialog-list'>";
+        fileList.forEach(function (file) {
+            result += "<li class='LHListItem' onclick='window.LocalHistory.whenClickListItem(this)' timestamp='" + file[1] + "'>";
+            result += "<span style='padding-right:3px;'>&bull;</span> " + file[1];
+            result += "<a href='#' onclick='event.stopPropagation(); event.preventDefault(); window.LocalHistory.handleItemClose(this);' class='LHListItemXClose' title='Delete'>&times;</a>";
+            result += "</li>";
+        });
+        result += "</ul>";
+        result += "</div>";
+
+        return result;
+    }
 
     /**
      * Creates an HTML string for a list of files to be reported on, suitable for use in a dialog.
@@ -578,6 +606,7 @@ define(function (require, exports, module) {
     exports.makeDialogFileList             = makeDialogFileList;
     exports.readAsText                     = readAsText;
     exports.writeText                      = writeText;
+    exports.makeDialogClickableFileList    = makeDialogClickableFileList;
     exports.convertToNativePath            = convertToNativePath;
     exports.convertWindowsPathToUnixPath   = convertWindowsPathToUnixPath;
     exports.getNativeBracketsDirectoryPath = getNativeBracketsDirectoryPath;

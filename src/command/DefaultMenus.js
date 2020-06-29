@@ -289,6 +289,9 @@ define(function (require, exports, module) {
         editor_cmenu.addMenuItem(Commands.EDIT_CUT);
         editor_cmenu.addMenuItem(Commands.EDIT_COPY);
         editor_cmenu.addMenuItem(Commands.EDIT_PASTE);
+        
+        editor_cmenu.addMenuDivider();
+		editor_cmenu.addMenuItem(Commands.TOGGLE_LOCAL_HISTORY);
 
         editor_cmenu.addMenuDivider();
         editor_cmenu.addMenuItem(Commands.EDIT_SELECT_ALL);

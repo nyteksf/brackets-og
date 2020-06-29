@@ -309,6 +309,11 @@
             "key": "Ctrl-PageUp"
         }
     ],
+    "navigate.toggleLocalHistory": [
+		{
+            "key": "Alt-L"
+        }
+	],
     "navigate.toggleQuickEdit":  [
         "Ctrl-E"
     ],
